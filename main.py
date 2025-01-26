@@ -5,159 +5,159 @@ import select
 
 class IAAgent:
     def __init__(self, max_history=20):
-        self.model_name = self.choose_model()  # Choisir le modèle initial
-        self._preload_model()  # Précharger le modèle initial
-        self.stop_event = threading.Event()  # Événement pour signaler l'interruption
-        self.conversation_history = []  # Historique de la conversation
-        self.max_history = max_history  # Nombre maximal de messages à conserver
+        self.model_name = self.choose_model()  # Choose the initial model
+        self._preload_model()  # Preload the initial model
+        self.stop_event = threading.Event()  # Event to signal interruption
+        self.conversation_history = []  # Conversation history
+        self.max_history = max_history  # Maximum number of messages to keep
 
     def _preload_model(self):
-        """Précharge le modèle pour éviter le temps de chargement lors de la première utilisation."""
+        """Preload the model to avoid loading time during the first use."""
         try:
-            ollama.generate(model=self.model_name, prompt="Préchargement du modèle.")
-            print(f"Modèle {self.model_name} préchargé avec succès.")
+            ollama.generate(model=self.model_name, prompt="Load model.")
+            print(f"Model {self.model_name} successfully loaded.")
         except Exception as e:
-            print(f"Erreur lors du préchargement du modèle: {e}")
+            print(f"Error during model loading: {e}")
 
     def _update_conversation_history(self, role, content):
-        """Ajoute un message à l'historique et conserve uniquement les derniers messages."""
+        """Add a message to the history and keep only the last messages."""
         self.conversation_history.append({"role": role, "content": content})
-        # Ne conserver que les derniers messages
+        # Keep only the last messages
         if len(self.conversation_history) > self.max_history:
             self.conversation_history.pop(0)
 
     def _generate_context(self):
-        """Génère le contexte en concaténant les derniers messages."""
+        """Generate the context by concatenating the last messages."""
         return "\n".join(
             [f"{msg['role']}: {msg['content']}" for msg in self.conversation_history]
         )
 
     def generate_response(self, prompt, stream=True):
-        """Génère une réponse en tenant compte du contexte de la conversation."""
+        """Generate a response considering the conversation context."""
         try:
-            # Ajouter le message de l'utilisateur à l'historique
+            # Add the user's message to the history
             self._update_conversation_history("user", prompt)
 
-            # Construire le contexte
+            # Build the context
             context = self._generate_context()
 
             if stream:
-                # Streaming de la réponse
-                print("IA: ", end="", flush=True)  # Commencer l'affichage sans saut de ligne
+                # Streaming the response
+                print("IA: ", end="", flush=True)  # Start display without newline
                 response = ""
                 for chunk in ollama.generate(
                     model=self.model_name,
-                    prompt=f"{context}\nuser: {prompt}",  # Utiliser le contexte
+                    prompt=f"{context}\nuser: {prompt}",  # Use the context
                     stream=True
                 ):
-                    if self.stop_event.is_set():  # Vérifier si l'utilisateur a demandé l'interruption
-                        print("\nGénération interrompue.", end="\n\n", flush=True)
-                        self.stop_event.clear()  # Réinitialiser l'événement
+                    if self.stop_event.is_set():  # Check if the user requested interruption
+                        print("\nGeneration stopped.", end="\n\n", flush=True)
+                        self.stop_event.clear()  # Reset the event
                         return
                     word = chunk['response']
-                    print(word, end="", flush=True)  # Afficher mot par mot
+                    print(word, end="", flush=True)  # Display word by word
                     response += word
-                # Ajouter la réponse de l'IA à l'historique
+                # Add the AI's response to the history
                 self._update_conversation_history("assistant", response)
-                print("\n", end="", flush=True)  # Saut de ligne après la fin du streaming
+                print("\n", end="", flush=True)  # Newline after streaming ends
             else:
-                # Réponse en une seule fois
+                # Single response
                 response = ollama.generate(
                     model=self.model_name,
-                    prompt=f"{context}\nuser: {prompt}"  # Utiliser le contexte
+                    prompt=f"{context}\nuser: {prompt}"  # Use the context
                 )['response']
-                # Ajouter la réponse de l'IA à l'historique
+                # Add the AI's response to the history
                 self._update_conversation_history("assistant", response)
                 print(f"IA: {response}")
         except Exception as e:
-            print(f"Erreur lors de la génération de la réponse: {e}")
+            print(f"Error during response generation: {e}")
 
     def list_available_models(self):
-        """Liste les modèles disponibles localement."""
+        """List the models available locally."""
         try:
             models = ollama.list()
             return [model['model'] for model in models['models']]
         except Exception as e:
-            print(f"Erreur lors de la récupération des modèles disponibles: {e}")
+            print(f"Error while fetching local models: {e}")
             return []
 
     def choose_model(self):
-        """Permet à l'utilisateur de choisir un modèle parmi ceux disponibles."""
+        """Allow the user to choose a model from those available."""
         models = self.list_available_models()
         if not models:
-            print("Aucun modèle disponible localement.")
+            print("No model locally available.")
             sys.exit(1)
 
-        print("Modèles disponibles localement:")
+        print("Models locally available:")
         for idx, model in enumerate(models):
             print(f"{idx + 1}. {model}")
 
-        choice = int(input("Choisissez un modèle par son numéro: ")) - 1
+        choice = int(input("Select a model: ")) - 1
         if 0 <= choice < len(models):
             return models[choice]
         else:
-            print("Choix invalide. Utilisation du premier modèle par défaut.")
+            print("Invalid selection. First model in list will be used by default.")
             return models[0]
 
     def change_model(self):
-        """Change le modèle en cours d'utilisation."""
-        print("\nChangement de modèle...")
+        """Change the currently used model."""
+        print("\nModel change...")
         new_model = self.choose_model()
         if new_model == self.model_name:
-            print(f"Le modèle {self.model_name} est déjà sélectionné.")
+            print(f"Model {self.model_name} has already been selected.")
             return
 
         self.model_name = new_model
-        self._preload_model()  # Précharger le nouveau modèle
-        print(f"Modèle changé avec succès. Nouveau modèle : {self.model_name}")
+        self._preload_model()  # Preload the new model
+        print(f"Model has been changed successfully. New model : {self.model_name}")
 
 def main():
-    """Fonction principale pour gérer l'interaction avec l'utilisateur."""
-    # Paramètre : nombre maximal de messages à conserver (ici 20, mais modifiable)
+    """Main function to manage user interaction."""
+    # Parameter: maximum number of messages to keep (here 20, but modifiable)
     agent = IAAgent(max_history=20)
 
-    print("\nCommandes spéciales:")
-    print("  - 'exit' ou 'quit' : Quitter la conversation.")
-    print("  - 'stop' : Interrompre la génération en cours.")
-    print("  - '!change_model' : Changer de modèle en cours de conversation.")
-    print("Appuyez sur Entrée pour commencer.")
+    print("\nCommands you can use:")
+    print("  - 'exit' or 'quit' : Quit conversation and app.")
+    print("  - 'stop' : Stop generation in progress.")
+    print("  - '!change_model' : Change model during discussion.")
+    print("Press Enter to start.")
 
     while True:
         try:
-            prompt = input("Vous: ")
+            prompt = input("You: ")
             if prompt.lower() in ['exit', 'quit']:
-                print("Fin de la conversation.")
+                print("End of conversation.")
                 break
             elif prompt.lower() == '!change_model':
                 agent.change_model()
                 continue
             elif prompt.lower() == 'stop':
                 if agent.stop_event.is_set():
-                    print("Aucune génération en cours.")
+                    print("No ongoing generation.")
                 else:
                     agent.stop_event.set()
                 continue
 
-            # Réinitialiser l'événement d'interruption
+            # Reset the interruption event
             agent.stop_event.clear()
 
-            # Lancer la génération de la réponse dans un thread séparé
+            # Start response generation in a separate thread
             thread = threading.Thread(target=agent.generate_response, args=(prompt,), kwargs={"stream": True})
             thread.start()
 
-            # Attendre que l'utilisateur tape 'stop' ou que la génération se termine
+            # Wait for the user to type 'stop' or for the generation to finish
             while thread.is_alive():
-                # Vérifier si une entrée clavier est disponible
+                # Check if keyboard input is available
                 if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
                     user_input = sys.stdin.readline().strip()
                     if user_input.lower() == 'stop':
-                        agent.stop_event.set()  # Signaler l'interruption
+                        agent.stop_event.set()  # Signal interruption
                         break
 
-            thread.join()  # Attendre que le thread se termine proprement
+            thread.join()  # Wait for the thread to finish cleanly
 
         except KeyboardInterrupt:
-            print("\nConversation interrompue.")
+            print("\nConversation interrupted.")
             break
 
 if __name__ == "__main__":
