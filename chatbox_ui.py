@@ -4,25 +4,38 @@ class ChatboxUI:
     def __init__(self, agent):
         self.agent = agent
         self.selected_model = None  # Track the selected model
+        self.is_processing = False  # Track if a message is being processed
 
     def generate_response(self, message, chat_history):
         """Generate a response and update the chat history."""
-        if not self.agent.model_name:
-            chat_history.append({"role": "assistant", "content": "No model selected. Please select a model first."})
+        if self.is_processing or not message:  # Skip if already processing or message is empty
             yield chat_history, ""
             return
 
-        chat_history.append({"role": "user", "content": message})
-        yield chat_history, ""
+        try:
+            self.is_processing = True  # Mark as processing
+            if not self.agent.model_name:
+                chat_history.append({"role": "assistant", "content": "No model selected. Please select a model first."})
+                yield chat_history, ""
+                return
 
-        assistant_response = ""
-        for chunk in self.agent.generate_response(message, stream=True):
-            assistant_response = chunk["content"]
-            if len(chat_history) > 0 and chat_history[-1]["role"] == "user":
-                chat_history.append({"role": "assistant", "content": assistant_response})
-            else:
-                chat_history[-1] = {"role": "assistant", "content": assistant_response}
-            yield chat_history, ""
+            # Add the user's message to the chat history
+            chat_history.append({"role": "user", "content": message})
+            yield chat_history, ""  # Clear the input immediately after sending
+
+            # Generate the assistant's response
+            assistant_response = ""
+            for chunk in self.agent.generate_response(message, stream=True):
+                assistant_response = chunk["content"]
+                if len(chat_history) > 0 and chat_history[-1]["role"] == "user":
+                    chat_history.append({"role": "assistant", "content": assistant_response})
+                else:
+                    chat_history[-1] = {"role": "assistant", "content": assistant_response}
+                yield chat_history, ""  # Update the chat history during streaming
+
+        finally:
+            self.is_processing = False  # Reset the processing flag
+            yield chat_history, ""  # Re-enable the input after streaming is complete
 
     def clear_history(self):
         """Clear the chat history."""
@@ -36,7 +49,7 @@ class ChatboxUI:
         self.selected_model = selected_model
         return (
             gr.Dropdown(choices=models, value=selected_model),
-            gr.Button(interactive=bool(selected_model)),
+            gr.Button("Send", interactive=bool(selected_model)),
         )
 
     def build_interface(self):
@@ -49,8 +62,8 @@ class ChatboxUI:
                     label="Conversation",
                     bubble_full_width=False,
                     avatar_images=(
-                        "https://via.placeholder.com/40/0078D7/FFFFFF?text=U",
-                        "https://via.placeholder.com/40/505050/FFFFFF?text=A",
+                        "https://cdn-icons-png.flaticon.com/512/64/64572.png",  # Avatar for user
+                        "https://cdn-icons-png.flaticon.com/512/4712/4712139.png",  # Avatar for assistant
                     ),
                     type="messages",
                 )
@@ -73,7 +86,6 @@ class ChatboxUI:
                     value=self.agent.model_name,
                     allow_custom_value=True,
                 )
-                change_model_button = gr.Button("Change Model", interactive=bool(self.agent.model_name))
                 model_status = gr.Textbox(label="Model Status", interactive=False)
 
             # Actions
@@ -89,7 +101,7 @@ class ChatboxUI:
                 outputs=chatbot,
                 queue=False
             )
-            change_model_button.click(
+            model_dropdown.change(
                 self.agent.change_model,
                 inputs=[model_dropdown],
                 outputs=[model_status],
@@ -100,13 +112,8 @@ class ChatboxUI:
                 outputs=[model_dropdown, send_button],
                 queue=False
             )
-            model_dropdown.change(
-                lambda model: None,  # Do not return anything
-                inputs=[model_dropdown],
-                outputs=[],
-            )
 
-            # Send with the "Enter" key
+            # Send with the "Enter" key (linked to the same function)
             message.submit(
                 self.generate_response,
                 inputs=[message, chatbot],
