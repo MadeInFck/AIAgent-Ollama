@@ -4,7 +4,7 @@ class ChatboxUI:
     def __init__(self, agent):
         self.agent = agent
         self.selected_model = None  # Track the selected model
-        self.is_processing = False  # Track if a message is being processing
+        self.is_processing = False  # Track if a message is being processed
 
     def generate_response(self, message, chat_history):
         """Generate a response and update the chat history."""
@@ -50,15 +50,12 @@ class ChatboxUI:
         return (
             gr.Dropdown(choices=models, value=selected_model),
             gr.Button("Send", interactive=bool(selected_model)),
-            f"**Current Model:** {selected_model}"  # Return the current model for dynamic display
         )
 
     def build_interface(self):
         """Build the Gradio interface."""
         with gr.Blocks() as interface:
-            # Title and current model display
             gr.Markdown("### Conversational Agent with Ollama")
-            current_model_display = gr.Markdown(f"**Current Model:** {self.agent.model_name}")
 
             with gr.Column():
                 chatbot = gr.Chatbot(
@@ -112,7 +109,7 @@ class ChatboxUI:
             ).then(
                 self.update_ui,
                 inputs=[],
-                outputs=[model_dropdown, send_button, current_model_display],  # Update the current model display
+                outputs=[model_dropdown, send_button],
                 queue=False
             )
 
